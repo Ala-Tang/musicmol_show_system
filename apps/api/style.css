@@ -1,0 +1,805 @@
+/* MusicMol — 黑底 / 1920×360 钢琴 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #000;
+  color: #e0e0e8;
+  font-family: system-ui, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* 钢琴上方：三维音符 / 分子飘动 — 横向占满视口，不限定窄宽 */
+.fx-strip {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  height: min(44vh, 460px);
+  min-height: 340px;
+  margin-bottom: 8px;
+  background: #000;
+  border: 1px solid #1a1a22;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.musicmol-fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.fx-strip .note-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+/* 主约束框：1920×360 px（物理 941mm×264mm） */
+.main-constraint-box {
+  position: relative;
+  width: 1920px;
+  height: 360px;
+  margin: 16px auto 0;
+  background: #000;
+  border: 1px solid #2a2a34;
+  border-radius: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 五线谱与按钮区域：绝对定位在约束框顶部 */
+.staff-and-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 140px;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  z-index: 10;
+  background: rgba(13, 13, 18, 0.85);
+  border-bottom: 1px solid #2a2a34;
+  box-sizing: border-box;
+}
+
+.staff-container {
+  flex: 1;
+  height: 140px;
+  overflow: hidden;
+  position: relative;
+}
+
+.staff-container svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 五线谱线条与谱号颜色 */
+.staff-container svg .vf-stave path,
+.staff-container svg .vf-stave line,
+.staff-container svg .vf-clef path {
+  stroke: rgba(255, 255, 255, 0.6) !important;
+}
+
+.staff-controls {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+
+.piano-generate-molecule-btn {
+  padding: 6px 10px;
+  border: 1px solid #4a6fa5;
+  border-radius: 4px;
+  background: #1e3a5f;
+  color: #e8eef8;
+  font-size: 13px;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: center;
+}
+
+.piano-generate-molecule-btn:hover {
+  background: #255284;
+}
+
+.piano-generate-molecule-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.smiles-result-display {
+  flex: 1;
+  padding: 6px 8px;
+  background: #14141a;
+  border: 1px solid #333340;
+  border-radius: 4px;
+  color: #7ee787;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-all;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 钢琴外框：占满约束框底部（高度 220px，与五线谱 140px 相加为 360px） */
+.piano-dim-outer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1920px;
+  height: 220px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.piano-viewport {
+  width: 1920px;
+  height: 220px;
+  margin: 0 auto;
+  background: #14141a;
+  border: 1px solid #2a2a34;
+  box-shadow: inset 0 0 0 1px #0f0f14;
+  overflow: hidden;
+}
+
+.piano-keys-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  background: #14141a;
+}
+
+.piano-keys-wrap canvas {
+  display: block;
+  width: 1920px;
+  height: 220px;
+}
+
+.piano-dim-below {
+  width: 1920px;
+  margin: 12px auto 0;
+  padding: 12px 14px 14px;
+  background: #0d0d12;
+  border: 1px solid #22222c;
+  border-radius: 6px;
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  color: rgba(220, 220, 230, 0.92);
+}
+
+.dim-below-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1e1e28;
+}
+
+.dim-below-tag {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 600;
+}
+
+.dim-below-tag-muted {
+  color: rgba(180, 180, 195, 0.75);
+  font-weight: 500;
+}
+
+.dim-below-line {
+  margin: 6px 0 0;
+  word-break: break-word;
+}
+
+.dim-below-line-small {
+  font-size: 11px;
+  color: rgba(200, 210, 230, 0.88);
+}
+
+.dim-below-muted {
+  color: rgba(160, 170, 190, 0.88);
+  font-size: 11px;
+}
+
+.dim-below-tight {
+  margin-top: 4px;
+}
+
+.dim-below-note {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: rgba(170, 200, 255, 0.88);
+}
+
+.keyboard-hidden {
+  display: none !important;
+}
+
+.btn {
+  padding: 8px 16px;
+  background: #1e1e28;
+  color: #ddd;
+  border: 1px solid #3a3a48;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn:hover {
+  background: #2a2a36;
+}
+
+.btn.primary {
+  background: #1b5e20;
+  border-color: #2e7d32;
+  color: #fff;
+}
+
+.recording-status {
+  padding: 8px 14px;
+  background: #3e1a1a;
+  border: 1px solid #7a2a2a;
+  border-radius: 6px;
+  color: #ffab91;
+}
+
+.piano-section-label {
+  width: 1920px;
+  margin: 20px auto 8px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: rgba(200, 200, 210, 0.9);
+  text-align: center;
+  line-height: 1.45;
+}
+
+.piano-play-mode {
+  width: 1920px;
+  margin: 0 auto 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 20px;
+  font-size: 13px;
+  color: rgba(210, 210, 220, 0.95);
+  background: #0d0d12;
+  border: 1px solid #22222c;
+  border-radius: 6px;
+}
+
+.piano-play-mode-title {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.piano-play-mode-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.piano-play-mode-opt input {
+  accent-color: #7cb342;
+}
+
+/* 分子 → 音乐 快速演奏入口 */
+.smiles-quick-play-bar {
+  width: 1920px;
+  margin: 0 auto 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 16px;
+  font-size: 13px;
+  color: rgba(210, 220, 240, 0.95);
+  background: #0d0d12;
+  border: 1px solid #2a2a34;
+  border-radius: 6px;
+}
+
+.smiles-quick-play-title {
+  font-weight: 600;
+  margin-right: 4px;
+  color: #7cb342;
+}
+
+.smiles-quick-play-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9aa0b4;
+}
+
+.smiles-quick-play-input {
+  padding: 6px 10px;
+  background: #16161e;
+  border: 1px solid #333340;
+  border-radius: 4px;
+  color: #eee;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  width: 280px;
+}
+
+.smiles-quick-play-input-bpm {
+  padding: 6px 10px;
+  background: #16161e;
+  border: 1px solid #333340;
+  border-radius: 4px;
+  color: #eee;
+  font-size: 13px;
+  width: 70px;
+}
+
+.smiles-quick-play-btn {
+  padding: 7px 16px;
+  background: #1b5e20;
+  border: 1px solid #2e7d32;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.smiles-quick-play-btn:hover {
+  background: #2e7d32;
+}
+
+.piano-extended-outer {
+  margin-top: 0;
+}
+
+.midi-exchange-bar {
+  width: 1920px;
+  margin: 0 auto 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 16px;
+  font-size: 12px;
+  color: rgba(200, 210, 230, 0.95);
+  background: #0a0a0f;
+  border: 1px solid #2a2a34;
+  border-radius: 6px;
+}
+
+.midi-exchange-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.midi-exchange-opt input {
+  accent-color: #7cb342;
+}
+
+.midi-exchange-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #9aa0b4;
+  min-width: min(420px, 100%);
+}
+
+.midi-exchange-status {
+  font-size: 11px;
+  color: #7cb342;
+  max-width: 280px;
+  word-break: break-word;
+}
+
+.midi-exchange-status--error {
+  color: #e57373;
+}
+
+@media (max-width: 800px) {
+  .piano-dim-outer {
+    overflow-x: auto;
+    padding: 24px 28px;
+  }
+}
+
+.panel {
+  background: #0d0d12;
+  border: 1px solid #22222c;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.panel-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #fff;
+}
+
+.rules-body {
+  font-size: 13px;
+  line-height: 1.55;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.note-line {
+  margin-bottom: 10px;
+}
+
+.note-display-inline {
+  color: #90caf9;
+  font-weight: 700;
+}
+
+.muted {
+  color: #8888a0;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  color: #aaa;
+}
+
+.input {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 10px;
+  background: #16161e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #eee;
+  font-family: ui-monospace, monospace;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.row.tight {
+  margin-bottom: 6px;
+}
+
+.smiles-out {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  margin: 8px 0;
+}
+
+.mol-view {
+  width: 100%;
+  height: 280px;
+  min-height: 240px;
+  background: #0d0d0d;
+  border: 1px solid #2a2a34;
+  border-radius: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.mol-view-large {
+  height: min(52vh, 520px);
+  min-height: 400px;
+  margin-top: 0;
+}
+
+/* 实时分子查看器：不占版面，供 3Dmol 正常获得宽高 */
+.mol-view.mol-view-offscreen {
+  position: absolute;
+  width: 520px;
+  height: 380px;
+  min-height: 380px;
+  left: -9999px;
+  top: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.smiles-info {
+  margin-top: 10px;
+  padding: 8px;
+  background: #1a1a24;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.foot {
+  margin-top: 24px;
+  color: #444;
+  font-size: 12px;
+}
+
+/* DOM 粒子（备用） */
+.note-particle {
+  position: absolute;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #c5cae9;
+  pointer-events: none;
+  text-shadow: 0 0 12px rgba(100, 150, 255, 0.5);
+  animation: smokeRise 3.5s ease-out forwards;
+}
+
+@keyframes smokeRise {
+  0% {
+    opacity: 0.9;
+    transform: translateY(0) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-160px) scale(1.15);
+  }
+}
+
+.splash-particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+}
+
+@keyframes splash {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx), var(--ty)) scale(0.3);
+  }
+}
+
+.splash-particle {
+  animation: splash 0.75s ease-out forwards;
+}
+
+.note-active {
+  animation: pulseNote 0.5s ease-out;
+}
+
+@keyframes pulseNote {
+  50% {
+    color: #fff;
+  }
+}
+
+/* 接口模式调试（钢琴下方） */
+.api-molecule-debug {
+  width: 1920px;
+  margin: 28px auto 0;
+  padding: 16px 18px 20px;
+  border: 1px solid #2a2a34;
+  border-radius: 6px;
+  background: #0c0c10;
+}
+
+.api-molecule-debug-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #e8e8f0;
+}
+
+.api-molecule-debug-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8a8a9a;
+  margin-bottom: 14px;
+}
+
+.api-molecule-debug-hint code {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #1a1a24;
+  color: #c5c5d8;
+}
+
+.api-molecule-debug-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.api-molecule-data-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #2a2a34;
+  background: #0a0a0f;
+}
+
+.api-molecule-ds-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9aa0b4;
+  margin-right: 4px;
+}
+
+.api-molecule-ds-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c8c8d8;
+  cursor: pointer;
+}
+
+.api-molecule-btn-secondary {
+  border-color: #3d4f66;
+  background: #1a2430;
+}
+
+.api-molecule-btn-secondary:hover {
+  background: #243044;
+}
+
+.api-molecule-submit-url,
+.api-molecule-conn-line {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9a9aaa;
+  margin-bottom: 8px;
+}
+
+.api-molecule-conn-line span {
+  color: #b8d4a8;
+}
+
+.api-molecule-poll-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #101018;
+  border: 1px solid #25252e;
+}
+
+.api-molecule-poll-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #c8c8d8;
+  cursor: pointer;
+}
+
+.api-molecule-poll-status {
+  font-size: 12px;
+  color: #8ab4f8;
+  flex: 1;
+  min-width: 200px;
+}
+
+.api-molecule-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #a0a0b0;
+}
+
+.api-molecule-input {
+  min-width: 72px;
+  padding: 6px 10px;
+  border: 1px solid #333340;
+  border-radius: 4px;
+  background: #12121a;
+  color: #e8e8f0;
+  font-size: 13px;
+}
+
+.api-molecule-input-wide {
+  min-width: 200px;
+  width: min(420px, 100%);
+}
+
+.api-molecule-btn {
+  padding: 8px 16px;
+  border: 1px solid #4a6fa5;
+  border-radius: 4px;
+  background: #1e3a5f;
+  color: #e8eef8;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.api-molecule-btn:hover {
+  background: #254a78;
+}
+
+.api-molecule-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+@media (max-width: 720px) {
+  .api-molecule-debug-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.api-molecule-debug-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ec5fe;
+  margin-bottom: 6px;
+}
+
+.api-molecule-pre {
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #08080c;
+  border: 1px solid #22222c;
+  color: #c8c8d8;
+}
+
+.api-molecule-debug-cell {
+  min-width: 0;
+}

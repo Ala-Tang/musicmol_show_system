@@ -1,0 +1,5 @@
+# Optional RDKit embed API for frontend (Python 3.10+ recommended).
+# Use PyPI package "rdkit" (wheels); "rdkit-pypi" is legacy and may not resolve on Windows.
+rdkit>=2022.9.1
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0

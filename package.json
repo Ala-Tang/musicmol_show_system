@@ -1,0 +1,15 @@
+{
+  "name": "pc",
+  "version": "1.0.0",
+  "description": "**分子 ⇄ 音乐** 双向映射的展陈互动系统：用户在化学元素钢琴上演奏或提交 MIDI，由深度学习模型生成候选分子（SMILES）；亦可从分子结构生成可演奏音乐，并在 Three.js 大屏、玻璃分子盒与数据大屏中可视化。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}

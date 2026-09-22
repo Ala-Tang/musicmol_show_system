@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MusicMol 2.0</title>
+  <link
+    rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%232a6cff'/%3E%3C/svg%3E"
+  />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/swiss-smiles-panel.css" />
+  <link rel="stylesheet" href="css/musicmol-welcome.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/",
+      "@mm/client/": "./packages/musicmol-client/"
+    }
+  }
+  </script>
+  <!-- 栈模式 / RDKit 探测 / MUSICMOL_*：见 js/paino/stack-bootstrap.js（含同步读 JSON，行为与原内联脚本一致） -->
+</head>
+<body>
+  <script src="js/paino/stack-bootstrap.js"></script>
+  <script>
+    (function painojsSchemeAHttpBanner() {
+      try {
+        var cfg = typeof globalThis !== 'undefined' ? globalThis.__PAINOJS_STACK_CONFIG__ : null;
+        if (!cfg || String(cfg.exhibitionScheme || '') !== 'httpLAN') return;
+        var pr =
+          typeof location !== 'undefined' ? String(location.protocol || '').toLowerCase() : '';
+        if (pr !== 'https:') return;
+        var httpHome = String(cfg.httpStaticOrigin || '').trim().replace(/\/+$/, '');
+        if (!httpHome) return;
+        var bar = document.createElement('div');
+        bar.setAttribute('role', 'alert');
+        bar.style.cssText =
+          'position:fixed;top:0;left:0;right:0;z-index:2147483000;padding:10px 14px;background:#3a2208;color:#ffe08a;font:14px/1.45 system-ui,sans-serif;text-align:center;border-bottom:2px solid #ffb020;';
+        var link = httpHome + '/index.html';
+        bar.innerHTML =
+          '展陈方案 A：当前页面为 HTTPS，浏览器会拦截对 <code>http://…:8767</code> 的请求（混合内容），分子 3D / TOP5 易失效。请改用 HTTP 打开：<a href="' +
+          link +
+          '" style="color:#fff;text-decoration:underline;font-weight:600">' +
+          link +
+          '</a>';
+        document.body.insertBefore(bar, document.body.firstChild);
+      } catch (_e) {}
+    })();
+  </script>
+  <script src="js/paino/logging/musicMol5020ApiLogger.global.js"></script>
+  <button
+    type="button"
+    id="musicmol-back-home"
+    class="corner-icon corner-icon--glass corner-icon--hoverfx musicmol-back-home"
+    hidden
+    aria-label="返回模式选择首页 / Back to home"
+    title="返回首页 · Back to home"
+    tabindex="0"
+  >
+    <span class="musicmol-back-home__zh">返回</span>
+    <span class="musicmol-back-home__en">Back</span>
+  </button>
+  <header id="app-title">
+    <span class="app-title__zh" id="app-title-zh">MusicMol 2.0</span>
+    <span class="app-title__en" id="app-title-en">Music × Molecule · Interactive Visualization</span>
+    <span class="app-title__music2mol-midi-sub" id="app-title-music2mol-midi-sub" hidden aria-live="polite">
+      <span class="app-title__music2mol-midi-sub-inner"><span id="app-title-music2mol-midi-sub-label">钢琴演奏中</span><span class="app-title__music2mol-midi-dotwrap" aria-hidden="true"><span class="app-title__music2mol-midi-dot">.</span><span class="app-title__music2mol-midi-dot">.</span><span class="app-title__music2mol-midi-dot">.</span></span></span>
+    </span>
+    <span class="app-title__transition-sub" id="app-title-transition-sub" hidden>分子属性预测中…</span>
+    <span class="app-title__galactic-sub" id="galactic-flight-subtitle" hidden>上市及临床小分子的化学空间</span>
+    <span class="app-title__hint" id="app-title-play-hint" hidden>音乐正在演奏中...</span>
+  </header>
+  <div id="top-right-ui" aria-label="右上角工具">
+    <div
+      class="corner-icon corner-icon--glass corner-icon--hoverfx corner-icon--top-right"
+      id="icon-midi-fx-demo"
+      title="MIDI 波浪特效演示"
+      role="button"
+      tabindex="0"
+      aria-label="样例：演示 MIDI 点云波浪动态效果"
+    >
+      <svg class="corner-icon__svg corner-icon__svg--neon" viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="midiFxDemoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ecfaff"/>
+            <stop offset="48%" stop-color="#bfeeff"/>
+            <stop offset="100%" stop-color="#72c4f0"/>
+          </linearGradient>
+        </defs>
+        <rect x="3.5" y="3.5" width="25" height="25" rx="3.5" fill="none" stroke="url(#midiFxDemoGrad)" stroke-width="1.35"/>
+        <!-- 示波条：示意频谱/动态 -->
+        <rect x="8" y="17" width="2.8" height="8" rx="0.8" fill="url(#midiFxDemoGrad)"/>
+        <rect x="12.5" y="12" width="2.8" height="13" rx="0.8" fill="url(#midiFxDemoGrad)"/>
+        <rect x="17" y="14.5" width="2.8" height="10.5" rx="0.8" fill="url(#midiFxDemoGrad)"/>
+        <rect x="21.5" y="9" width="2.8" height="16" rx="0.8" fill="url(#midiFxDemoGrad)"/>
+      </svg>
+    </div>
+    <div
+      class="corner-icon corner-icon--glass corner-icon--hoverfx corner-icon--top-right"
+      id="icon-embed-effect2"
+      title="玻璃盒分子数据大屏"
+      role="button"
+      tabindex="0"
+      aria-label="打开玻璃盒分子对应的数据大屏"
+    >
+      <svg class="corner-icon__svg corner-icon__svg--neon" viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="embedEffectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ecfaff"/>
+            <stop offset="48%" stop-color="#bfeeff"/>
+            <stop offset="100%" stop-color="#72c4f0"/>
+          </linearGradient>
+        </defs>
+        <rect x="3.5" y="3.5" width="25" height="25" rx="3.5" fill="none" stroke="url(#embedEffectGrad)" stroke-width="1.35"/>
+        <rect x="8" y="8.2" width="16" height="10" rx="1.4" fill="none" stroke="url(#embedEffectGrad)" stroke-width="1.2"/>
+        <rect x="11.2" y="20.8" width="9.6" height="1.8" rx="0.8" fill="url(#embedEffectGrad)"/>
+      </svg>
+    </div>
+  </div>
+  <div id="wrap">
+    <canvas id="c"></canvas>
+    <!-- 缺省不用外链帧，避免 404；需要对比时再由 JS 设 N_FRAMES 与本地帧路径 -->
+    <img
+      id="ref"
+      src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+      alt=""
+    />
+    <video id="syncVid" muted playsinline loop preload="auto"></video>
+    <section id="embedded-effect-panel" class="embedded-glass-molecule" hidden aria-label="点云上的玻璃盒分子层">
+      <iframe
+        id="embedded-effect-frame"
+        title="玻璃盒分子"
+        src="about:blank"
+        data-glass-src="glass-molecule-demo/embed.html?embed=1&v=20260507-m2m-perf"
+        loading="eager"
+        allow="autoplay"
+      ></iframe>
+    </section>
+  </div>
+  <div id="bottom-left-ui">
+    <div id="corner-icons">
+      <div class="corner-icon corner-icon--glass corner-icon--hoverfx" id="icon-sample-key" title="样例键" role="button" aria-label="样例键：药物分子示例">
+        <svg class="corner-icon__svg corner-icon__svg--neon" viewBox="0 0 32 32" aria-hidden="true">
+          <defs>
+            <linearGradient id="cornerSampleCyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ecfaff"/>
+              <stop offset="48%" stop-color="#bfeeff"/>
+              <stop offset="100%" stop-color="#72c4f0"/>
+            </linearGradient>
+          </defs>
+          <rect x="3.5" y="3.5" width="25" height="25" rx="3.5" fill="none" stroke="url(#cornerSampleCyanGrad)" stroke-width="1.35"/>
+          <!-- 2×2 圆点图形图标（非文字），表示多分子样例 -->
+          <circle cx="11" cy="12" r="2.35" fill="url(#cornerSampleCyanGrad)"/>
+          <circle cx="21" cy="12" r="2.35" fill="url(#cornerSampleCyanGrad)"/>
+          <circle cx="11" cy="21" r="2.35" fill="url(#cornerSampleCyanGrad)"/>
+          <circle cx="21" cy="21" r="2.35" fill="url(#cornerSampleCyanGrad)"/>
+        </svg>
+      </div>
+      <a
+        href="model-test.html"
+        class="corner-icon corner-icon--glass corner-icon--hoverfx"
+        id="icon-model-test"
+        title="PDB 模型测试"
+        aria-label="打开 PDB 模型测试页：样例分子列表与三维查看"
+      >
+        <svg class="corner-icon__svg corner-icon__svg--neon" viewBox="0 0 32 32" aria-hidden="true">
+          <defs>
+            <linearGradient id="cornerModelTestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#ecfaff"/>
+              <stop offset="48%" stop-color="#bfeeff"/>
+              <stop offset="100%" stop-color="#72c4f0"/>
+            </linearGradient>
+          </defs>
+          <rect x="3.5" y="3.5" width="25" height="25" rx="3.5" fill="none" stroke="url(#cornerModelTestGrad)" stroke-width="1.35"/>
+          <!-- 线框立方体示意 3D 模型 -->
+          <path
+            fill="none"
+            stroke="url(#cornerModelTestGrad)"
+            stroke-width="1.35"
+            stroke-linejoin="round"
+            d="M9 11l7-3.5L23 11v9l-7 3.5L9 20zm0 0l7 3.5m0 0L23 11m-7 3.5V23"
+          />
+        </svg>
+      </a>
+      <!-- 自定义分子：双语文字按钮，打开 SMILES / JSME 面板 -->
+      <div
+        id="corner-icon-custom-mol"
+        class="corner-icon corner-icon--glass corner-icon--hoverfx corner-custom-mol-btn"
+        title="自定义分子 · 绘制 / 编辑 SMILES 与三维预览 · Custom molecule · draw & edit SMILES & 3D"
+        role="button"
+        tabindex="0"
+        aria-label="自定义分子：打开绘制与 SMILES 编辑 · Custom molecule · open structure editor"
+      >
+        <span class="corner-custom-mol-btn__zh">自定义分子</span>
+        <span class="corner-custom-mol-btn__en">Custom molecule</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="musicmol-welcome" aria-hidden="true">
+    <canvas class="mm-particle-bg" id="mmParticleBg" width="300" height="150" aria-hidden="true"></canvas>
+    <div class="mm-rain-container" id="mmRainContainer" aria-hidden="true"></div>
+    <div class="mm-wave-floor" aria-hidden="true"></div>
+    <div class="mm-screen">
+      <div class="mm-welcome-title">MUSICMOL</div>
+      <div class="mm-welcome-subtitle">音乐 × 分子 · 交互式可视化系统</div>
+      <div class="mm-mode-selector">
+        <div class="mm-mode-card" data-route="mol2music" role="button" tabindex="0" aria-label="分子生成音乐：仅样例与手动">
+          <div class="mm-glow-ring"></div>
+          <div class="mm-mode-icon mm-mode-icon--mol2music" aria-hidden="true">
+            <img
+              class="mm-welcome-aspirin-icon"
+              src="assets/mm-welcome-aspirin-icon.png?v=3"
+              alt=""
+              width="120"
+              height="120"
+              decoding="sync"
+              fetchpriority="high"
+            />
+          </div>
+          <div class="mm-mode-title">
+            分子生成音乐
+            <span class="mm-title-en">Molecule to Music</span>
+          </div>
+          <div class="mm-mode-desc">
+            输入化学分子式<br />
+            系统自动转化为钢琴旋律<br />
+            聆听分子的声音
+          </div>
+        </div>
+        <div class="mm-mode-card" data-route="music2mol" role="button" tabindex="0" aria-label="音乐生成分子：仅 MIDI 与玻璃盒">
+          <div class="mm-glow-ring"></div>
+          <div class="mm-mode-icon" aria-hidden="true">🎹</div>
+          <div class="mm-mode-title">
+            音乐生成分子
+            <span class="mm-title-en">Music to Molecule</span>
+          </div>
+          <div class="mm-mode-desc">
+            在钢琴上自由弹奏<br />
+            音符实时转化为化学分子<br />
+            创造你的分子
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/musicmol-welcome-bootstrap.js"></script>
+
+  <!-- Chart.js：数据大屏图表 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- 3Dmol.js：样例药物层；vendor/3dmol 由 npm postinstall 同步 -->
+  <script src="vendor/3dmol/3Dmol-min.js"></script>
+  <script>
+    (function () {
+      try {
+        var g = typeof globalThis !== 'undefined' ? globalThis : window;
+        var L = g['3Dmol'];
+        if (L && typeof L.createViewer === 'function' && (!g.$3Dmol || typeof g.$3Dmol.createViewer !== 'function')) {
+          g.$3Dmol = L;
+        }
+        var P = L && L.Parsers;
+        var sdf = P && (typeof P.sdf === 'function' ? P.sdf : typeof P.SDF === 'function' ? P.SDF : null);
+        if (P && typeof sdf === 'function') {
+          if (!P.mol) P.mol = sdf;
+          if (!P.MOL) P.MOL = sdf;
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <!-- RDKit MinimalLib：initRDKitModule（必须在 ES 模块之前） -->
+  <script src="vendor/rdkit/RDKit_minimal.js?v=20260423-rdkit-unified-1"></script>
+  <!-- 漂浮分子：默认 3Dmol（CSS2D 叠在点云场景上，与样例层同管线）；可改 MOLECULE_VISUAL.floatingRenderer 回 Three -->
+  <script type="module" src="js/paino/main.js?v=20260617-dashboard-props"></script>
+</body>
+</html>

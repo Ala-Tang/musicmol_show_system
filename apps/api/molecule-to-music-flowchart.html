@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>分子 → 音乐 流程图 | MusicMol</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      themeVariables: {
+        primaryColor: "#1e3a5f",
+        primaryTextColor: "#e8eef5",
+        primaryBorderColor: "#3d7ea6",
+        lineColor: "#7eb8da",
+        secondaryColor: "#2d4a3e",
+        tertiaryColor: "#3a2d4a",
+        fontFamily: "system-ui, 'Segoe UI', sans-serif",
+      },
+      flowchart: {
+        curve: "basis",
+        padding: 12,
+        nodeSpacing: 45,
+        rankSpacing: 55,
+      },
+    });
+  </script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #161d27;
+      --text: #dce4ee;
+      --muted: #8a9aac;
+      --accent: #5eb3e0;
+      --border: #2a3544;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(ellipse 120% 80% at 50% -20%, #1a2840 0%, var(--bg) 55%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.65rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+    .card h2 {
+      margin: 0 0 1rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+    footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    footer ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.2rem;
+    }
+    .note {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>分子 → 音乐（MIDI 事件）流程梳理</h1>
+      <p class="subtitle">
+        基于仓库 <code>MusicMol_0322/app.py</code>、<code>分子到音乐/smile_to_midi_v10</code> 与前端
+        <code>musicmol-piano.js</code> 的调用关系整理。
+      </p>
+    </header>
+
+    <section class="card">
+      <h2>主链路：HTTP API → 服务端生成 → 前端播放</h2>
+      <pre class="mermaid">
+flowchart TB
+  subgraph IN["输入"]
+    SMILES["SMILES 字符串"]
+    BPM["bpm（可选，默认 100，范围 40–240）"]
+  end
+
+  subgraph SYNC["同步接口"]
+    API_MTM["POST /api/molecule_to_music<br/>JSON: smiles, bpm"]
+    RESP["响应: ok, midi_events[], meta<br/>（canonical_smiles、event_count 等）"]
+  end
+
+  subgraph ASYNC["异步 / 联调"]
+    API_SUB["POST /api/molecule_submit<br/>可选 auto_play, session_id"]
+    Q["写入待播队列 _mol_music_ui_pending"]
+    POLL["GET /api/molecule_music_ui_pending<br/>轮询"]
+    DIS["POST /api/molecule_music_ui_dismiss<br/>演奏后清除"]
+  end
+
+  subgraph SRV["服务端 app.py"]
+    RD{RDKit<br/>MolFromSmiles}
+    FAIL_RD["400：无法解析"]
+    GEN["_generate_midi_events_from_smiles"]
+    V10["① smile_to_midi_v10<br/>smiles_to_midi → 临时 .mid"]
+    MIDO["mido 读 MIDI<br/>note_on / note_off → 配对"]
+    FAIL_GEN["500：MIDI 事件生成失败"]
+    EVT["midi_events 每项:<br/>time, type, note, duration, velocity<br/>（毫秒 & MIDI 音高）"]
+  end
+
+  subgraph FE["前端 musicmol-piano.js"]
+    NORM["normalizePlayEvent<br/>兼容 time / start"]
+    AUTO["enterAutoPlayFromMidiEvents<br/>setTimeout 调度发声"]
+  end
+
+  SMILES --> API_MTM
+  BPM --> API_MTM
+  API_MTM --> RD
+  API_SUB --> RD
+  RD -->|失败| FAIL_RD
+  RD -->|成功| GEN
+  GEN --> V10
+  V10 -->|成功| MIDO
+  V10 -.->|异常| FAIL_GEN
+  MIDO --> EVT
+  EVT --> RESP
+  EVT --> Q
+  Q --> POLL
+  POLL --> NORM
+  RESP --> NORM
+  NORM --> AUTO
+  POLL --> DIS
+      </pre>
+      <p class="note">
+        就绪状态可由 <code>GET /api/status_lite</code> 中的 <code>molecule_to_music</code> 字段反映（与
+        <code>分子到音乐</code> 目录是否存在、Cython 模块是否可用等相关）。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>可选分支：浏览器内 smile_to_score（未默认挂载于 index.html）</h2>
+      <pre class="mermaid">
+flowchart LR
+  subgraph JS["smile_to_score v1 / v2 / v4 .js"]
+    PARSE["parseSmilesStructure<br/>手性 / 环 / 支链 / 键级"]
+    MAP["元素 → 音名 → MIDI"]
+    GSF["window.generateScoreFromSmiles<br/>smiles, bpm"]
+  end
+
+  subgraph LEGACY["若页面引入脚本"]
+    PJS["piano.js smilesToMidi()"]
+  end
+
+  PARSE --> MAP --> GSF
+  GSF --> PJS
+      </pre>
+      <p class="note">
+        当前主页面 <code>index.html</code> 主要走服务端 <code>smile_to_midi_v10</code> 生成的
+        <code>midi_events</code>；本地 JS 规则不一定逐字节一致，适用于离线演示或对照调试。
+      </p>
+    </section>
+
+    <footer>
+      <div>单页说明文档 · 可直接用浏览器打开本文件查看流程图（需联网加载 Mermaid CDN）。</div>
+      <ul>
+        <li>详细接口清单：<code>MusicMol_0322/docs/FRONTEND_API_IN_USE.md</code></li>
+        <li>默认 API 端口约定：<strong>5020</strong>（<code>MUSICMOL_LISTEN_PORT</code>）</li>
+      </ul>
+    </footer>
+  </div>
+</body>
+</html>

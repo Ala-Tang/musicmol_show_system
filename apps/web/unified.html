@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MusicMol 2.0 · 上展陈下钢琴（同屏）</title>
+  <!--
+    同屏同时：上 = PainoJS 展陈（/app/index.html?unifiedShell=1）；下 = 完整钢琴（/app/piano-embed/…）。
+    布局：顶栏与底栏绝对定位分栏，互不遮挡；底栏有最小高度，避免钢琴区被压没。
+  -->
+  <style>
+    :root {
+      /*
+       * 底栏默认高度：保证「下面钢琴」可弹（约 24–34dvh），避免旧公式 min(…) 与上报逻辑一起把底栏压到 ~108px。
+       * 子帧 postMessage 仍会精调，但父页对最终高度有下限（见 setPianoBarHeightPx）。
+       */
+      --unified-piano-h: clamp(180px, min(26dvh, 38vw), 400px);
+    }
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      max-height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      /* 与顶 iframe 展陈底色一致；底栏收紧后若仍有 1px 缝不显纯黑 */
+      background: #0a0e27;
+      box-sizing: border-box;
+    }
+    /* 分栏壳：主区与底栏互不侵占（避免 iframe 与 flex 计算导致「钢琴盖住上区」） */
+    /* 须占满视口高度，子 iframe 的 % 高度才有参照（仅含绝对定位子元素时，100% 在 Firefox 等下曾塌成 ~134px） */
+    .unified-shell {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100%;
+      max-height: 100vh;
+      max-height: 100dvh;
+      box-sizing: border-box;
+    }
+    /*
+     * 顶栏高度用视口单位，不依赖 .unified-shell 的百分比解析链，避免顶 iframe 高度异常变小。
+     */
+    .unified-shell__top {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: auto;
+      width: 100%;
+      height: calc(100vh - var(--unified-piano-h));
+      height: calc(100dvh - var(--unified-piano-h));
+      min-height: 0;
+      max-height: calc(100vh - var(--unified-piano-h));
+      max-height: calc(100dvh - var(--unified-piano-h));
+      border: 0;
+      display: block;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .unified-shell__bottom {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      min-height: 200px;
+      height: var(--unified-piano-h);
+      max-height: var(--unified-piano-h);
+      border: 0;
+      display: block;
+      border-top: 2px solid #1a2530;
+      background: #0a0a0c;
+      box-sizing: border-box;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.45);
+      z-index: 24;
+    }
+  </style>
+</head>
+<body>
+  <div class="unified-shell" role="application" aria-label="上为展陈下为钢琴，同屏合一">
+    <iframe
+      id="unified-frame-top"
+      class="unified-shell__top"
+      title="PainoJS 展陈主界面"
+      src="about:blank"
+      loading="eager"
+      allow="autoplay; fullscreen"
+    ></iframe>
+    <iframe
+      id="unified-frame-bottom"
+      class="unified-shell__bottom"
+      title="MusicMol 钢琴（pinao8）"
+      src="about:blank"
+      loading="eager"
+      allow="autoplay"
+    ></iframe>
+  </div>
+  <script>
+    (function () {
+      var base =
+        typeof location !== 'undefined' &&
+        String(location.pathname || '').indexOf('/app/') === 0
+          ? '/app/'
+          : '';
+      var top = document.getElementById('unified-frame-top');
+      var bot = document.getElementById('unified-frame-bottom');
+      if (top) top.src = base + 'index.html?unifiedShell=1';
+      /* 与 Flask /app/piano-embed/ 默认路由一致，少一次 index.html → / 的 308 */
+      if (bot) bot.src = base + 'piano-embed/?embed=unified&musicmol_same_origin=1';
+    })();
+    /* 钢琴 embed：宽度限缩时实际视觉高度 < 默认底栏高，父页 body 会露出纯黑；按子帧上报收紧底栏，把纵向空间还给上 iframe */
+    (function () {
+      function unifiedPianoBarFloorPx() {
+        try {
+          var v = typeof window !== 'undefined' && window.innerHeight ? window.innerHeight : 0;
+          return Math.max(200, Math.min(360, Math.round(v * 0.24)));
+        } catch (_e) {
+          return 220;
+        }
+      }
+      function setPianoBarHeightPx(h) {
+        try {
+          var lo = unifiedPianoBarFloorPx();
+          h = Math.round(Math.min(640, Math.max(lo, h)));
+          document.documentElement.style.setProperty('--unified-piano-h', h + 'px');
+          var bot = document.getElementById('unified-frame-bottom');
+          if (bot) {
+            bot.style.setProperty('height', h + 'px', 'important');
+            bot.style.setProperty('max-height', h + 'px', 'important');
+          }
+        } catch (_e) {}
+      }
+      /* 同源：优先读子窗口 tick 写入的 __MUSICMOL_UNIFIED_CHROME_H__；否则量 #app 并与 iframe/inner 高取 min，避免 br.height 仍为布局高时底栏被撑到半屏 */
+      var lastIframeMeasure = -1;
+      function syncPianoBarFromBottomIframe() {
+        try {
+          var bot = document.getElementById('unified-frame-bottom');
+          if (!bot || !bot.contentWindow || !bot.contentDocument) return;
+          var w = bot.contentWindow;
+          var doc = bot.contentDocument;
+          var app = doc.getElementById('app');
+          if (!app || typeof app.getBoundingClientRect !== 'function') return;
+          var br = app.getBoundingClientRect();
+          var raw = Math.ceil(br.height) + 8;
+          var inner = typeof w.innerHeight === 'number' && w.innerHeight > 0 ? w.innerHeight : 9999;
+          var dch = doc.documentElement && doc.documentElement.clientHeight > 0 ? doc.documentElement.clientHeight : 9999;
+          /* 勿用 bot.clientHeight：底栏 iframe 已被 setPianoBarHeightPx 压矮后，clientHeight 会等于当前像素 cap，与 merged 取 min 会永远锁在最小值（如 108px） */
+          var cap = Math.floor(Math.min(inner, dch) + 2);
+          var gh = w.__MUSICMOL_UNIFIED_CHROME_H__;
+          var merged = raw;
+          if (typeof gh === 'number' && gh >= 160 && gh <= 640) {
+            merged = Math.min(merged, gh);
+          }
+          var lo = unifiedPianoBarFloorPx();
+          var h = Math.min(640, Math.max(lo, Math.min(merged, cap)));
+          if (!Number.isFinite(h) || h < 40) return;
+          if (Math.abs(h - lastIframeMeasure) <= 2) return;
+          lastIframeMeasure = h;
+          setPianoBarHeightPx(h);
+        } catch (_e) {}
+      }
+      window.addEventListener('message', function (ev) {
+        try {
+          if (String(ev.origin || '') !== String(window.location.origin || '')) return;
+          /* 拒绝顶 iframe，避免误收其它 postMessage；底栏 contentWindow 在部分环境下与 ev.source 严格不等，故不单依赖该判断 */
+          var topFr = document.getElementById('unified-frame-top');
+          if (topFr && topFr.contentWindow && ev.source === topFr.contentWindow) return;
+          var d = ev.data;
+          if (!d || d.type !== 'musicmolUnifiedPianoChrome') return;
+          var h = Number(d.h);
+          if (!Number.isFinite(h)) return;
+          lastIframeMeasure = -1;
+          try {
+            var bot = document.getElementById('unified-frame-bottom');
+            if (bot && bot.contentWindow && bot.contentDocument) {
+              var w = bot.contentWindow;
+              var doc = bot.contentDocument;
+              var inner = typeof w.innerHeight === 'number' && w.innerHeight > 0 ? w.innerHeight : 9999;
+              var dch = doc.documentElement && doc.documentElement.clientHeight > 0 ? doc.documentElement.clientHeight : 9999;
+              var cap = Math.floor(Math.min(inner, dch) + 2);
+              /* 子帧过矮时不要继续压到不可用高度 */
+              if (cap >= 220) {
+                h = Math.min(h, cap);
+              }
+            }
+          } catch (_cap) {}
+          setPianoBarHeightPx(h);
+        } catch (_e) {
+          /* ignore */
+        }
+      });
+      var botEl = document.getElementById('unified-frame-bottom');
+      if (botEl) {
+        botEl.addEventListener('load', function () {
+          syncPianoBarFromBottomIframe();
+          requestAnimationFrame(syncPianoBarFromBottomIframe);
+          requestAnimationFrame(function () {
+            requestAnimationFrame(syncPianoBarFromBottomIframe);
+          });
+          setTimeout(syncPianoBarFromBottomIframe, 40);
+          setTimeout(syncPianoBarFromBottomIframe, 200);
+          setTimeout(syncPianoBarFromBottomIframe, 600);
+          var n = 0;
+          var poll = setInterval(function () {
+            n += 1;
+            lastIframeMeasure = -1;
+            syncPianoBarFromBottomIframe();
+            if (n >= 40) clearInterval(poll);
+          }, 120);
+        });
+        window.addEventListener('resize', function () {
+          lastIframeMeasure = -1;
+          syncPianoBarFromBottomIframe();
+        });
+        if (typeof ResizeObserver !== 'undefined') {
+          try {
+            var ro = new ResizeObserver(function () {
+              lastIframeMeasure = -1;
+              syncPianoBarFromBottomIframe();
+            });
+            ro.observe(botEl);
+          } catch (_e) {}
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

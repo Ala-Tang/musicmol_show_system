@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>服务器资源监控 · Server Monitor</title>
+<style>
+  :root {
+    --bg: #020b18;
+    --bg-card: rgba(7, 22, 45, 0.85);
+    --cyan: #46d9ff;
+    --cyan-2: #7cecff;
+    --blue: #179dff;
+    --green: #32ffb4;
+    --yellow: #ffd84d;
+    --red: #ff5c7c;
+    --text: #dff7ff;
+    --muted: #8fb7d8;
+    --line: rgba(67, 192, 255, 0.22);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(100,200,255,0.03) 1px, transparent 1px);
+    background-size: 100% 4px;
+    opacity: 0.15;
+  }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(2, 11, 24, 0.7);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header h1 {
+    font-size: 1.35rem; font-weight: 600; letter-spacing: 0.5px;
+    background: linear-gradient(90deg, var(--cyan), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header .status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    padding: 20px 28px 28px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+    backdrop-filter: blur(4px);
+    transition: border-color 0.3s;
+  }
+  .card:hover { border-color: rgba(67, 192, 255, 0.45); }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 0.95rem; font-weight: 600; color: var(--cyan-2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; background: rgba(70, 217, 255, 0.12);
+  }
+  .card-value {
+    font-size: 1.6rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-wrap {
+    height: 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden; margin-top: 10px;
+  }
+  .bar {
+    height: 100%; border-radius: 4px;
+    transition: width 0.6s ease, background 0.6s ease;
+    min-width: 2px;
+  }
+  .bar-low { background: linear-gradient(90deg, var(--green), #2ecc71); }
+  .bar-mid { background: linear-gradient(90deg, var(--yellow), #f39c12); }
+  .bar-high { background: linear-gradient(90deg, var(--red), #e74c3c); }
+  .detail-row {
+    display: flex; justify-content: space-between;
+    font-size: 0.8rem; color: var(--muted);
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .detail-row span:last-child { color: var(--text); font-weight: 500; }
+  .chart-canvas {
+    width: 100%; height: 90px; margin-top: 10px;
+  }
+  .process-list {
+    max-height: 200px; overflow-y: auto;
+    margin-top: 10px; font-size: 0.8rem;
+  }
+  .process-list::-webkit-scrollbar { width: 4px; }
+  .process-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
+  .process-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .process-item:last-child { border-bottom: none; }
+  .process-name { color: var(--text); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .process-mem { color: var(--cyan); font-variant-numeric: tabular-nums; }
+  .process-cpu { color: var(--yellow); font-variant-numeric: tabular-nums; margin-left: 10px; }
+  .gpu-none {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; color: var(--muted); font-size: 0.9rem;
+    gap: 8px;
+  }
+  .gpu-none .icon { font-size: 2rem; opacity: 0.5; }
+  .footer {
+    text-align: center; padding: 12px;
+    font-size: 0.75rem; color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; padding: 12px 16px; }
+    .header { padding: 14px 16px; }
+    .header h1 { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔬 服务器资源监控</h1>
+  <div class="status">
+    <span class="status-dot"></span>
+    <span id="conn-status">实时刷新中 · <span id="refresh-sec">1</span>s</span>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- CPU -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">🖥</span> CPU 使用率</div>
+      <div class="card-value" id="cpu-val">--%</div>
+    </div>
+    <div class="bar-wrap"><div class="bar" id="cpu-bar" style="width:0%"></div></div>
+    <div class="detail-row"><span>核心数</span><span id="cpu-cores">--</span></div>
+    <div class="detail-row"><span>频率</span><span id="cpu-freq">-- MHz</span></div>
+    <div class="detail-row"><span>负载 (1/5/15min)</span><span id="cpu-load">--</span></div>
+    <canvas class="chart-canvas" id="cpu-chart"></canvas>
+  </div>
+
+  <!-- Memory -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">💾</span> 内存</div>
+      <div class="card-value" id="mem-val">--%</div>
+    </div>
+    <div class="bar-wrap"><div class="bar" id="mem-bar" style="width:0%"></div></div>
+    <div class="detail-row"><span>已用 / 总量</span><span id="mem-used">-- / -- GB</span></div>
+    <div class="detail-row"><span>可用</span><span id="mem-free">-- GB</span></div>
+    <div class="detail-row"><span>缓存 / 缓冲</span><span id="mem-cache">-- GB</span></div>
+    <canvas class="chart-canvas" id="mem-chart"></canvas>
+  </div>
+
+  <!-- Disk -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">💿</span> 磁盘</div>
+      <div class="card-value" id="disk-val">--%</div>
+    </div>
+    <div class="bar-wrap"><div class="bar" id="disk-bar" style="width:0%"></div></div>
+    <div class="detail-row"><span>已用 / 总量</span><span id="disk-used">-- / -- GB</span></div>
+    <div class="detail-row"><span>可用</span><span id="disk-free">-- GB</span></div>
+    <div class="detail-row"><span>挂载点</span><span id="disk-mount">/</span></div>
+  </div>
+
+  <!-- Network -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">🌐</span> 网络 IO</div>
+      <div class="card-value" id="net-val">--</div>
+    </div>
+    <div class="detail-row"><span>↑ 发送</span><span id="net-sent">-- MB</span></div>
+    <div class="detail-row"><span>↓ 接收</span><span id="net-recv">-- MB</span></div>
+    <div class="detail-row"><span>↑ 发送速率</span><span id="net-sent-s">-- KB/s</span></div>
+    <div class="detail-row"><span>↓ 接收速率</span><span id="net-recv-s">-- KB/s</span></div>
+  </div>
+
+  <!-- GPU -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">🎮</span> GPU</div>
+      <div class="card-value" id="gpu-val">--</div>
+    </div>
+    <div id="gpu-content">
+      <div class="gpu-none">
+        <div class="icon">🚫</div>
+        <div>未检测到 NVIDIA GPU</div>
+        <div style="font-size:0.75rem;opacity:0.6">当前服务器为 CPU-only 推理环境</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Processes -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="card-icon">📊</span> 进程 TOP5</div>
+      <div class="card-value" style="font-size:1rem;color:var(--muted)">By CPU</div>
+    </div>
+    <div class="process-list" id="process-list">
+      <div class="process-item"><span class="process-name">加载中...</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  MusicMol Server Monitor · 阿里云 ECS · Ubuntu 24.04 · 数据每秒更新
+</div>
+
+<script>
+const API_URL = location.origin + '/api/system_stats';
+const MAX_POINTS = 60;
+const cpuHistory = new Array(MAX_POINTS).fill(0);
+const memHistory = new Array(MAX_POINTS).fill(0);
+let lastNet = null;
+
+function getBarClass(pct) {
+  if (pct < 60) return 'bar-low';
+  if (pct < 85) return 'bar-mid';
+  return 'bar-high';
+}
+
+function drawSparkline(canvas, data, color) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+  if (data.every(v => v === 0)) return;
+
+  ctx.beginPath();
+  const step = w / (data.length - 1);
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = h - (v / 100) * h;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // fill gradient
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color.replace(')', ',0.25)').replace('rgb', 'rgba'));
+  grad.addColorStop(1, color.replace(')', ',0)').replace('rgb', 'rgba'));
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+async function fetchStats() {
+  try {
+    const res = await fetch(API_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+function fmtBytes(bytes) {
+  if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB';
+  if (bytes >= 1e6) return (bytes / 1e6).toFixed(2) + ' MB';
+  if (bytes >= 1e3) return (bytes / 1e3).toFixed(2) + ' KB';
+  return bytes + ' B';
+}
+
+function updateUI(d) {
+  // CPU
+  const cpuPct = d.cpu.percent;
+  document.getElementById('cpu-val').textContent = cpuPct.toFixed(1) + '%';
+  const cpuBar = document.getElementById('cpu-bar');
+  cpuBar.style.width = cpuPct + '%';
+  cpuBar.className = 'bar ' + getBarClass(cpuPct);
+  document.getElementById('cpu-cores').textContent = d.cpu.cores + ' (逻辑 ' + d.cpu.logical + ')';
+  document.getElementById('cpu-freq').textContent = (d.cpu.freq / 1000).toFixed(2) + ' GHz';
+  document.getElementById('cpu-load').textContent = d.cpu.load.join(' / ');
+  cpuHistory.push(cpuPct);
+  cpuHistory.shift();
+  drawSparkline(document.getElementById('cpu-chart'), cpuHistory, 'rgb(70, 217, 255)');
+
+  // Memory
+  const memPct = d.memory.percent;
+  document.getElementById('mem-val').textContent = memPct.toFixed(1) + '%';
+  const memBar = document.getElementById('mem-bar');
+  memBar.style.width = memPct + '%';
+  memBar.className = 'bar ' + getBarClass(memPct);
+  document.getElementById('mem-used').textContent =
+    (d.memory.used / 1e9).toFixed(2) + ' / ' + (d.memory.total / 1e9).toFixed(2) + ' GB';
+  document.getElementById('mem-free').textContent = (d.memory.available / 1e9).toFixed(2) + ' GB';
+  document.getElementById('mem-cache').textContent =
+    (d.memory.cached / 1e9).toFixed(2) + ' / ' + (d.memory.buffers / 1e9).toFixed(2) + ' GB';
+  memHistory.push(memPct);
+  memHistory.shift();
+  drawSparkline(document.getElementById('mem-chart'), memHistory, 'rgb(50, 255, 180)');
+
+  // Disk
+  const diskPct = d.disk.percent;
+  document.getElementById('disk-val').textContent = diskPct.toFixed(1) + '%';
+  const diskBar = document.getElementById('disk-bar');
+  diskBar.style.width = diskPct + '%';
+  diskBar.className = 'bar ' + getBarClass(diskPct);
+  document.getElementById('disk-used').textContent =
+    (d.disk.used / 1e9).toFixed(2) + ' / ' + (d.disk.total / 1e9).toFixed(2) + ' GB';
+  document.getElementById('disk-free').textContent = (d.disk.free / 1e9).toFixed(2) + ' GB';
+  document.getElementById('disk-mount').textContent = d.disk.mountpoint;
+
+  // Network
+  document.getElementById('net-val').textContent = d.net.interfaces[0]?.name || 'eth0';
+  document.getElementById('net-sent').textContent = fmtBytes(d.net.total_sent);
+  document.getElementById('net-recv').textContent = fmtBytes(d.net.total_recv);
+
+  if (lastNet && d.net.timestamp > lastNet.timestamp) {
+    const dt = d.net.timestamp - lastNet.timestamp;
+    const sentSpeed = (d.net.total_sent - lastNet.total_sent) / dt * 1000;
+    const recvSpeed = (d.net.total_recv - lastNet.total_recv) / dt * 1000;
+    document.getElementById('net-sent-s').textContent = fmtBytes(sentSpeed) + '/s';
+    document.getElementById('net-recv-s').textContent = fmtBytes(recvSpeed) + '/s';
+  }
+  lastNet = { ...d.net };
+
+  // GPU
+  const gpuEl = document.getElementById('gpu-val');
+  const gpuContent = document.getElementById('gpu-content');
+  if (d.gpu.available) {
+    gpuEl.textContent = d.gpu.utilization + '%';
+    gpuEl.style.color = 'var(--cyan)';
+    gpuContent.innerHTML = `
+      <div class="bar-wrap"><div class="bar ${getBarClass(d.gpu.utilization)}" style="width:${d.gpu.utilization}%"></div></div>
+      <div class="detail-row"><span>型号</span><span>${d.gpu.name}</span></div>
+      <div class="detail-row"><span>显存</span><span>${d.gpu.memory_used} / ${d.gpu.memory_total} MB</span></div>
+      <div class="detail-row"><span>温度</span><span>${d.gpu.temperature}°C</span></div>
+    `;
+  } else {
+    gpuEl.textContent = 'N/A';
+    gpuEl.style.color = 'var(--muted)';
+  }
+
+  // Processes
+  const list = document.getElementById('process-list');
+  list.innerHTML = d.processes.map(p => `
+    <div class="process-item">
+      <span class="process-name" title="${p.name}">${p.name}</span>
+      <span>
+        <span class="process-mem">${(p.memory_mb).toFixed(0)}M</span>
+        <span class="process-cpu">${p.cpu_percent.toFixed(1)}%</span>
+      </span>
+    </div>
+  `).join('');
+}
+
+let countdown = 1;
+function tick() {
+  countdown--;
+  if (countdown <= 0) {
+    countdown = 1;
+    fetchStats().then(d => { if (d) updateUI(d); });
+  }
+  document.getElementById('refresh-sec').textContent = countdown;
+}
+
+// initial
+fetchStats().then(d => { if (d) updateUI(d); });
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

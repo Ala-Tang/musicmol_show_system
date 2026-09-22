@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 钢琴模拟 · 941×264</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100%;
+      overflow: auto;
+      background: #0a0a0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 预设像素画布：整幅 941×264，内凹黑边不减少画布像素 */
+    #viewport {
+      width: 941px;
+      height: 264px;
+      position: relative;
+      background: #000;
+      box-shadow:
+        inset 0 0 0 8px #080808,
+        inset 0 0 0 9px #2a2a2a,
+        0 4px 24px rgba(0, 0, 0, 0.45);
+      flex-shrink: 0;
+    }
+    #viewport canvas {
+      display: block;
+      width: 941px;
+      height: 264px;
+      vertical-align: top;
+    }
+    .dim-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      font: 11px/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace;
+      color: rgba(255, 255, 255, 0.88);
+      text-shadow: 0 0 6px #000, 0 1px 2px #000;
+    }
+    .dim-labels .w {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      letter-spacing: 0.04em;
+    }
+    .dim-labels .h {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%) rotate(-90deg);
+      transform-origin: center center;
+      letter-spacing: 0.04em;
+    }
+    .dim-labels .badge {
+      position: absolute;
+      right: 10px;
+      bottom: 8px;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .hint {
+      position: absolute;
+      left: 14px;
+      bottom: 26px;
+      font: 10px/1.3 system-ui, sans-serif;
+      color: rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport">
+    <canvas id="c" width="941" height="264"></canvas>
+    <div class="dim-labels" aria-hidden="true">
+      <span class="w">宽 941 px</span>
+      <span class="h">高 264 px</span>
+      <span class="badge">输出分辨率 941 × 264</span>
+    </div>
+    <span class="hint">鼠标 / 触控 · 松手释音</span>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+  (function () {
+    const THREE = window.THREE;
+    const OUT_W = 941;
+    const OUT_H = 264;
+
+    const canvas = document.getElementById('c');
+    const W = OUT_W;
+    const H = OUT_H;
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance',
+    });
+    renderer.setSize(W, H, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd8d8de);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    envScene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const e1 = new THREE.DirectionalLight(0xfff0e8, 2.2);
+    e1.position.set(2, 4, 2);
+    envScene.add(e1);
+    const e2 = new THREE.Mesh(
+      new THREE.SphereGeometry(3, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xc8d4e8, roughness: 0.2, metalness: 0.1 })
+    );
+    e2.position.set(0, 0, -2);
+    envScene.add(e2);
+    const envRT = pmrem.fromScene(envScene, 0);
+    scene.environment = envRT.texture;
+    pmrem.dispose();
+
+    const hemi = new THREE.HemisphereLight(0xfff5ef, 0xa8b0c4, 0.5);
+    scene.add(hemi);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+
+    /** 舞台：凸台 + 键盘，整体再居中 */
+    const stageRoot = new THREE.Group();
+    scene.add(stageRoot);
+
+    const keyboardRoot = new THREE.Group();
+    stageRoot.add(keyboardRoot);
+
+    let camera;
+
+    const WHITE_W = 0.198;
+    const WHITE_D = 0.82;
+    const WHITE_H = 0.088;
+    const BLACK_W = 0.108;
+    const BLACK_D = 0.5;
+    const BLACK_H = 0.062;
+    const BLACK_ABOVE_WHITE = 0.014;
+    const blackPivotY = WHITE_H + BLACK_ABOVE_WHITE + BLACK_H * 0.5;
+    const BLACK_Z = -0.06;
+
+    const whiteMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf0e8dc,
+      roughness: 0.38,
+      metalness: 0,
+      clearcoat: 0.92,
+      clearcoatRoughness: 0.14,
+      envMapIntensity: 1,
+    });
+    const blackMat = new THREE.MeshPhysicalMaterial({
+      color: 0x121418,
+      roughness: 0.22,
+      metalness: 0.06,
+      clearcoat: 0.88,
+      clearcoatRoughness: 0.1,
+      envMapIntensity: 1,
+    });
+
+    const woodDark = new THREE.MeshPhysicalMaterial({
+      color: 0x3d2e26,
+      roughness: 0.55,
+      metalness: 0.05,
+      clearcoat: 0.35,
+      clearcoatRoughness: 0.35,
+      envMapIntensity: 0.6,
+    });
+    const woodMid = new THREE.MeshPhysicalMaterial({
+      color: 0x5c4338,
+      roughness: 0.48,
+      metalness: 0.04,
+      clearcoat: 0.4,
+      clearcoatRoughness: 0.28,
+      envMapIntensity: 0.55,
+    });
+
+    const PHYS = {
+      rest: 0,
+      pressed: -0.088,
+      stiffnessDown: 420,
+      stiffnessUp: 520,
+      dampingDown: 14.5,
+      dampingUp: 11.2,
+      mass: 1,
+    };
+
+    function midiToFreq(m) {
+      return 440 * Math.pow(2, (m - 69) / 12);
+    }
+
+    function inharmonicFactor(n) {
+      const B = 0.00018;
+      return 1 + B * n * n;
+    }
+
+    const keys = [];
+    const keyByMesh = new Map();
+
+    let whiteIndex = 0;
+    const startMidi = 60;
+
+    for (let o = 0; o < 2; o++) {
+      for (let n = 0; n < 7; n++) {
+        const midi = startMidi + o * 12 + [0, 2, 4, 5, 7, 9, 11][n];
+        const x0 = (whiteIndex - 6.5) * WHITE_W;
+        const pivot = new THREE.Group();
+        pivot.position.set(x0, WHITE_H * 0.5 + 0.001, 0.02);
+        keyboardRoot.add(pivot);
+
+        const geo = new THREE.BoxGeometry(WHITE_W * 0.96, WHITE_H, WHITE_D);
+        geo.translate(0, 0, -WHITE_D * 0.5 + 0.04);
+        const mesh = new THREE.Mesh(geo, whiteMat.clone());
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.midi = midi;
+        mesh.userData.isBlack = false;
+        pivot.add(mesh);
+
+        keys.push({
+          pivot,
+          mesh,
+          midi,
+          isBlack: false,
+          angle: 0,
+          vel: 0,
+          pressed: false,
+          target: PHYS.rest,
+          stiff: PHYS.stiffnessUp,
+          damp: PHYS.dampingUp,
+        });
+        keyByMesh.set(mesh, keys[keys.length - 1]);
+        whiteIndex++;
+      }
+    }
+
+    const blackSpots = [
+      { afterWhite: 0, rel: 0.58, semi: 1 },
+      { afterWhite: 1, rel: 0.58, semi: 3 },
+      { afterWhite: 3, rel: 0.58, semi: 6 },
+      { afterWhite: 4, rel: 0.58, semi: 8 },
+      { afterWhite: 5, rel: 0.58, semi: 10 },
+    ];
+
+    for (let o = 0; o < 2; o++) {
+      for (const bo of blackSpots) {
+        const wi = o * 7 + bo.afterWhite;
+        const x0 = (wi - 6.5) * WHITE_W + bo.rel * WHITE_W;
+        const midi = startMidi + o * 12 + bo.semi;
+        const pivot = new THREE.Group();
+        pivot.position.set(x0, blackPivotY, BLACK_Z);
+        keyboardRoot.add(pivot);
+
+        const geo = new THREE.BoxGeometry(BLACK_W, BLACK_H, BLACK_D);
+        geo.translate(0, 0, -BLACK_D * 0.5 + 0.03);
+        const mesh = new THREE.Mesh(geo, blackMat.clone());
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.midi = midi;
+        mesh.userData.isBlack = true;
+        pivot.add(mesh);
+
+        keys.push({
+          pivot,
+          mesh,
+          midi,
+          isBlack: true,
+          angle: 0,
+          vel: 0,
+          pressed: false,
+          target: PHYS.rest,
+          stiff: PHYS.stiffnessUp,
+          damp: PHYS.dampingUp,
+        });
+        keyByMesh.set(mesh, keys[keys.length - 1]);
+      }
+    }
+
+    /* 键顶朝 +Z；scale.z=-1 把键身前后翻转，演奏者近端朝向相机，低音仍在左侧（不用绕 Y 180°，否则会左右镜像） */
+    keyboardRoot.rotation.x = Math.PI / 2;
+    keyboardRoot.scale.z = -1;
+
+    scene.updateMatrixWorld(true);
+    let kbBbox = new THREE.Box3().setFromObject(keyboardRoot);
+    const kbCenter = new THREE.Vector3();
+    kbBbox.getCenter(kbCenter);
+    keyboardRoot.position.sub(kbCenter);
+
+    scene.updateMatrixWorld(true);
+    kbBbox = new THREE.Box3().setFromObject(keyboardRoot);
+    const kbMinY = kbBbox.min.y;
+    const kbHalfX = (kbBbox.max.x - kbBbox.min.x) / 2;
+    const kbHalfZ = (kbBbox.max.z - kbBbox.min.z) / 2;
+
+    /* 3D 凸台：下层宽、上层收，顶面承键 */
+    const pedGroup = new THREE.Group();
+    stageRoot.add(pedGroup);
+
+    const baseH = 0.2;
+    const baseY = kbMinY - baseH * 0.5 - 0.02;
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(kbHalfX * 2 + 1.15, baseH, kbHalfZ * 2 + 0.95),
+      woodDark
+    );
+    base.position.set(0, baseY, -0.12);
+    base.castShadow = true;
+    base.receiveShadow = true;
+    pedGroup.add(base);
+
+    const midH = 0.12;
+    const midY = kbMinY - midH * 0.5 - 0.01;
+    const mid = new THREE.Mesh(
+      new THREE.BoxGeometry(kbHalfX * 2 + 0.72, midH, kbHalfZ * 2 + 0.62),
+      woodMid
+    );
+    mid.position.set(0, midY, -0.08);
+    mid.castShadow = true;
+    mid.receiveShadow = true;
+    pedGroup.add(mid);
+
+    const topH = 0.07;
+    const topY = kbMinY - topH * 0.5;
+    const topSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(kbHalfX * 2 + 0.38, topH, kbHalfZ * 2 + 0.38),
+      woodDark
+    );
+    topSlab.position.set(0, topY, -0.04);
+    topSlab.castShadow = true;
+    topSlab.receiveShadow = true;
+    topSlab.rotation.x = -0.04;
+    pedGroup.add(topSlab);
+
+    scene.updateMatrixWorld(true);
+    const stageBbox = new THREE.Box3().setFromObject(stageRoot);
+    const stageCenter = new THREE.Vector3();
+    stageBbox.getCenter(stageCenter);
+    stageRoot.position.sub(stageCenter);
+
+    scene.updateMatrixWorld(true);
+    const fitBbox = new THREE.Box3().setFromObject(stageRoot);
+    const spanX = (fitBbox.max.x - fitBbox.min.x) * 1.04;
+    const spanY = (fitBbox.max.y - fitBbox.min.y) * 1.12;
+
+    const aspect = W / H;
+    const vFov = 31 * (Math.PI / 180);
+    const distY = (spanY / 2) / Math.tan(vFov / 2);
+    const distX = (spanX / 2) / (Math.tan(vFov / 2) * aspect);
+    let camDist = Math.max(distX, distY, 2.55) * 1.06;
+
+    camera = new THREE.PerspectiveCamera(31, aspect, 0.08, 80);
+    camera.up.set(0, 1, 0);
+    camera.position.set(-0.38, 0.52, camDist * 0.94);
+    camera.lookAt(0, 0.02, -0.06);
+    camera.updateProjectionMatrix();
+
+    const sun = new THREE.DirectionalLight(0xfff6ed, 1.08);
+    sun.position.set(-3.2, 4.2, 5);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 28;
+    sun.shadow.camera.left = -5;
+    sun.shadow.camera.right = 5;
+    sun.shadow.camera.top = 4;
+    sun.shadow.camera.bottom = -4;
+    sun.shadow.bias = -0.00025;
+    sun.shadow.normalBias = 0.028;
+    scene.add(sun);
+
+    const rim = new THREE.DirectionalLight(0xd8e4ff, 0.48);
+    rim.position.set(3.6, 2.2, 2.8);
+    scene.add(rim);
+
+    const bounce = new THREE.DirectionalLight(0xffeedd, 0.2);
+    bounce.position.set(0.6, -1.4, 2.2);
+    scene.add(bounce);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 8),
+      new THREE.MeshStandardMaterial({ color: 0xbfc4ce, roughness: 0.92, metalness: 0.02 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, fitBbox.min.y - 0.22, -0.55);
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    let audioCtx = null;
+    const voices = new Map();
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function noteOn(midi, velocity) {
+      const ctx = ensureAudio();
+      const f0 = midiToFreq(midi);
+      if (voices.has(midi)) noteOff(midi);
+
+      const t0 = ctx.currentTime;
+      const v = Math.max(0.12, Math.min(1, velocity));
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, t0);
+      master.gain.exponentialRampToValueAtTime(0.32 * v, t0 + 0.006);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.Q.setValueAtTime(0.55, t0);
+      filter.frequency.setValueAtTime(6200, t0);
+      filter.frequency.exponentialRampToValueAtTime(1400, t0 + 0.55);
+
+      master.connect(filter);
+      filter.connect(ctx.destination);
+
+      const oscs = [];
+      const partials = 14;
+      for (let n = 1; n <= partials; n++) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        const ff = f0 * n * inharmonicFactor(n);
+        osc.frequency.setValueAtTime(ff, t0);
+
+        const g = ctx.createGain();
+        const rel = 1 / (n * n);
+        const peak = rel * (n <= 3 ? 1.35 : n <= 6 ? 0.95 : 0.55) * v;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t0 + 0.004 + n * 0.0004);
+
+        osc.connect(g);
+        g.connect(master);
+        osc.start(t0);
+        oscs.push({ osc, gain: g });
+      }
+
+      voices.set(midi, { master, filter, oscs, ctx });
+    }
+
+    function noteOff(midi) {
+      const voice = voices.get(midi);
+      if (!voice) return;
+      const ctx = voice.ctx;
+      const t = ctx.currentTime;
+      const rel = 0.32;
+
+      voice.master.gain.cancelScheduledValues(t);
+      voice.master.gain.setValueAtTime(Math.max(voice.master.gain.value, 0.0002), t);
+      voice.master.gain.exponentialRampToValueAtTime(0.0001, t + rel);
+
+      try {
+        voice.filter.frequency.cancelScheduledValues(t);
+        voice.filter.frequency.setValueAtTime(voice.filter.frequency.value, t);
+        voice.filter.frequency.exponentialRampToValueAtTime(400, t + rel * 0.85);
+      } catch (_) {}
+
+      voice.oscs.forEach(({ osc, gain }) => {
+        gain.gain.cancelScheduledValues(t);
+        gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + rel * 0.75);
+        try {
+          osc.stop(t + rel + 0.08);
+        } catch (_) {}
+      });
+
+      setTimeout(() => voices.delete(midi), (rel + 0.15) * 1000);
+    }
+
+    function setKeyPressed(state, down) {
+      if (state.pressed === down) return;
+      state.pressed = down;
+      if (down) {
+        state.target = PHYS.pressed;
+        state.stiff = PHYS.stiffnessDown;
+        state.damp = PHYS.dampingDown;
+        noteOn(state.midi, 0.78);
+      } else {
+        state.target = PHYS.rest;
+        state.stiff = PHYS.stiffnessUp;
+        state.damp = PHYS.dampingUp;
+        noteOff(state.midi);
+      }
+    }
+
+    function integrateKey(state, dt) {
+      const x = state.angle - state.target;
+      const acc = (-state.stiff * x - state.damp * state.vel) / PHYS.mass;
+      state.vel += acc * dt;
+      state.angle += state.vel * dt;
+      state.pivot.rotation.x = state.angle;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const pickables = keys.map((k) => k.mesh);
+
+    function pick(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = -((clientY - rect.top) / rect.height) * 2 + 1;
+      pointer.set(nx, ny);
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(pickables, false);
+      if (!hits.length) return null;
+      hits.sort((a, b) => {
+        const ka = keyByMesh.get(a.object);
+        const kb = keyByMesh.get(b.object);
+        if (ka?.isBlack && !kb?.isBlack) return -1;
+        if (!ka?.isBlack && kb?.isBlack) return 1;
+        return a.distance - b.distance;
+      });
+      return keyByMesh.get(hits[0].object);
+    }
+
+    let activeKey = null;
+
+    function onDown(ev) {
+      ensureAudio();
+      const cx = ev.clientX ?? ev.touches?.[0]?.clientX;
+      const cy = ev.clientY ?? ev.touches?.[0]?.clientY;
+      const k = pick(cx, cy);
+      if (k) {
+        activeKey = k;
+        setKeyPressed(k, true);
+      }
+    }
+
+    function onUp() {
+      if (activeKey) {
+        setKeyPressed(activeKey, false);
+        activeKey = null;
+      }
+    }
+
+    function onMove(ev) {
+      if (!activeKey) return;
+      const cx = ev.clientX ?? ev.touches?.[0]?.clientX;
+      const cy = ev.clientY ?? ev.touches?.[0]?.clientY;
+      const k = pick(cx, cy);
+      if (k !== activeKey) {
+        setKeyPressed(activeKey, false);
+        activeKey = k;
+        if (k) setKeyPressed(k, true);
+      }
+    }
+
+    canvas.addEventListener('mousedown', onDown);
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); onDown(e); }, { passive: false });
+    window.addEventListener('touchend', onUp);
+    window.addEventListener('touchcancel', onUp);
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); onMove(e); }, { passive: false });
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      keys.forEach((k) => integrateKey(k, dt));
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+  </script>
+</body>
+</html>

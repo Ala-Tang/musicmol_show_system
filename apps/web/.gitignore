@@ -1,0 +1,9 @@
+node_modules/
+.painojs-stack-mode.json
+.tools/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+node_modules

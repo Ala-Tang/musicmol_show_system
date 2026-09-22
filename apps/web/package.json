@@ -1,0 +1,41 @@
+{
+  "name": "piano",
+  "private": true,
+  "type": "module",
+  "description": "化学元素钢琴大屏可视化前端（Three.js + RDKit WASM）",
+  "scripts": {
+    "start": "npx --yes serve . --listen tcp://0.0.0.0:8766",
+    "receiver:poll": "python3 ../../services/ui-poll-receiver/app.py",
+    "check:exhibition": "bash scripts/check-exhibition-connectivity.sh",
+    "restart:dev": "bash scripts/restart-dev.sh",
+    "admin:local": "python3 server/local_admin_app/app.py",
+    "admin:local:bg": "bash scripts/start-local-admin.sh",
+    "admin:local:stop": "bash scripts/stop-local-admin.sh",
+    "watch:8082": "python3 scripts/watch-8082-pending.py",
+    "monitor:glass": "node scripts/monitor-glass-stack.mjs",
+    "check:glass-midi": "node scripts/glass-embed-midi-smoke.mjs",
+    "diag:embed-reveal-gate": "node scripts/diag-embed-reveal3dmol-gate.mjs",
+    "start:all": "powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1",
+    "vendor-three": "node scripts/vendor-three.mjs",
+    "postinstall": "node scripts/postinstall-three.mjs && node scripts/vendor-3dmol.mjs && node scripts/vendor-rdkit.mjs && node scripts/vendor-legacy-three.mjs",
+    "vendor-3dmol": "node scripts/vendor-3dmol.mjs",
+    "vendor-rdkit": "node scripts/vendor-rdkit.mjs",
+    "vendor-legacy-three": "node scripts/vendor-legacy-three.mjs",
+    "install:cn": "npm install --registry=https://registry.npmmirror.com",
+    "playwright:install": "bash scripts/install-playwright-chromium.sh",
+    "dev:galactic": "node ./node_modules/vite/bin/vite.js --config vite.galactic.config.js",
+    "build:galactic": "node ./node_modules/vite/bin/vite.js build --config vite.galactic.config.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@rdkit/rdkit": "2025.3.4-1.0.0",
+    "3dmol": "^2.5.4",
+    "vite": "^5.4.11"
+  }
+}

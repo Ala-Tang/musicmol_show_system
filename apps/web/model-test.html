@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDB 模型测试 — 药物样例列表</title>
+  <link rel="stylesheet" href="css/model-test.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/",
+      "@mm/client/": "./packages/musicmol-client/"
+    }
+  }
+  </script>
+  <script>
+    (function () {
+      var base = 'http://127.0.0.1:8767';
+      try {
+        if (typeof globalThis === 'undefined') return;
+        if (Object.prototype.hasOwnProperty.call(globalThis, 'RDKIT_EMBED_API_BASE')) {
+          var ex = String(globalThis.RDKIT_EMBED_API_BASE || '').trim();
+          if (ex) return;
+        }
+      } catch (_) {}
+      var ctrl = new AbortController();
+      var tid = setTimeout(function () {
+        try {
+          ctrl.abort();
+        } catch (_) {}
+      }, 700);
+      fetch(base + '/health', { method: 'GET', signal: ctrl.signal, mode: 'cors', credentials: 'omit' })
+        .then(function (r) {
+          clearTimeout(tid);
+          if (r && r.ok) globalThis.RDKIT_EMBED_API_BASE = base;
+        })
+        .catch(function () {
+          clearTimeout(tid);
+        });
+    })();
+  </script>
+</head>
+<body>
+  <div id="mt-root">
+    <header class="mt-header">
+      <a class="mt-back" href="index.html">← 返回主界面</a>
+      <h1>模型显示测试（PDBLoader + 球棍）</h1>
+    </header>
+    <div class="mt-body">
+      <aside class="mt-list-wrap">
+        <div class="mt-list-title">样例 JSON「分子列表」— 点击加载三维模型（鼠标拖动旋转）</div>
+        <ul id="mt-list"></ul>
+      </aside>
+      <div class="mt-view-wrap">
+        <canvas id="mt-canvas"></canvas>
+        <div id="mt-overlay">从左侧选择分子…</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/paino/pages/modelTestMain.js"></script>
+</body>
+</html>

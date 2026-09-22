@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    (function () {
+      var q = '';
+      try {
+        q = String(window.location.search || '');
+      } catch (_e) {}
+      if (/\bembed=unified\b/i.test(q)) {
+        document.write(
+          '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />'
+        );
+      } else {
+        document.write(
+          '<meta name="viewport" content="width=1920, height=360, initial-scale=1.0" />'
+        );
+      }
+    })();
+  </script>
+  <title>钢琴 · 1920×360</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="piano-root">
+  <div id="app" role="application" aria-label="网页钢琴">
+    <header class="top-bar">
+      <div class="top-bar-inner">
+        <div class="nav-cluster nav-left">
+          <button type="button" class="text-btn text-btn-secondary" id="btn-song" title="按当前状态播放内置曲谱">点歌</button>
+          <button type="button" class="text-btn text-btn-secondary" id="btn-status" title="切换自动 / 手动">状态：手动</button>
+          <button type="button" class="nav-btn" id="step-back" title="左移一格" aria-label="左移一格">
+            <span class="nav-icon" aria-hidden="true">‹</span>
+          </button>
+        </div>
+
+        <div class="minimap-wrap" id="minimap-wrap" title="键盘范围示意，拖动或点击跳转">
+          <div class="minimap" id="minimap" aria-hidden="true"></div>
+          <div class="minimap-viewport" id="minimap-viewport"></div>
+        </div>
+
+        <div class="nav-cluster nav-right">
+          <div class="api-status-group" title="API 状态">
+            <div class="api-status-item">
+              <span class="api-status-dot" id="status-m2m"></span>
+              <span class="api-status-label">M→M</span>
+            </div>
+            <div class="api-status-item">
+              <span class="api-status-dot" id="status-mol"></span>
+              <span class="api-status-label">Mol</span>
+            </div>
+          </div>
+          <button type="button" class="nav-btn" id="step-forward" title="右移一格" aria-label="右移一格">
+            <span class="nav-icon" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="text-btn" id="btn-molecule">生成分子</button>
+          <button type="button" class="text-btn text-btn-secondary" id="btn-reset">重置</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="keyboard-stage" id="keyboard-stage">
+      <div class="keyboard" id="keyboard"></div>
+      <div class="fx-layer" id="fx-layer" aria-hidden="true"></div>
+      <div id="score-overlay" class="score-overlay" hidden aria-hidden="true">
+        <div class="score-overlay-card">
+          <div class="score-sheet-scroll" id="score-sheet-scroll">
+            <div class="score-sheet" id="score-sheet"></div>
+          </div>
+          <aside class="score-overlay-actions">
+            <button type="button" class="text-btn text-btn-secondary" id="score-preview">试听</button>
+            <button type="button" class="text-btn" id="score-send">确认发送</button>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <div class="molecule-toast" id="molecule-toast" hidden></div>
+  </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

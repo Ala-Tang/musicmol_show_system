@@ -1,0 +1,8 @@
+{
+  "resolved": false,
+  "molecule_music_dir": null,
+  "readme_excerpt": "（静态占位）启动 Flask 后将由 GET /api/molecule_vendor_info 覆盖为真实路径与 README 摘要。离线打开页面时，请将 musicmol_vs-master 放在与 MusicMol_0322 同级的 pinao8 目录，或 MusicMol_0322/vendor/ 下。",
+  "smile_to_midi_import_ok": false,
+  "smile_to_midi_import_error": "未探测（静态 JSON）",
+  "note": "smile_to_midi_v10 需编译 _core；演奏仍由浏览器 smile_to_score_v4.js 完成。"
+}
